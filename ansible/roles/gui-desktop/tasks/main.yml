@@ -1,0 +1,69 @@
+---
+# tasks/main.yml for gui-desktop role
+
+- name: Install XFCE desktop environment
+  apt:
+    name:
+      - xfce4
+      - xfce4-goodies
+    state: present
+
+- name: Install XRDP
+  apt:
+    name: xrdp
+    state: present
+
+- name: Install xorgxrdp for XRDP Xorg backend
+  apt:
+    name: xorgxrdp
+    state: present
+
+- name: Ensure XRDP is enabled and started
+  systemd:
+    name: xrdp
+    enabled: yes
+    state: started
+
+- name: Disable auto-login for local GUI (console only)
+  lineinfile:
+    path: /etc/lightdm/lightdm.conf
+    regexp: '^autologin-user='
+    line: '#autologin-user='
+    create: yes
+  notify: Restart lightdm
+
+- name: Set XRDP to use XFCE session
+  copy:
+    dest: /etc/skel/.xsession
+    content: "startxfce4\n"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart xrdp
+
+- name: Ensure /etc/xrdp/key.pem is owned by xrdp
+  file:
+    path: /etc/xrdp/key.pem
+    owner: xrdp
+    group: xrdp
+    mode: '0600'
+  become: true
+
+- name: Backup original /etc/xrdp/startwm.sh if it exists
+  copy:
+    src: /etc/xrdp/startwm.sh
+    dest: /etc/xrdp/startwm.sh.org
+    remote_src: yes
+  ignore_errors: true
+  become: true
+
+- name: Set /etc/xrdp/startwm.sh to launch XFCE
+  copy:
+    dest: /etc/xrdp/startwm.sh
+    content: "#!/bin/sh\nstartxfce4\n"
+    owner: root
+    group: root
+    mode: '0755'
+  notify: Restart xrdp
+
+- import_tasks: network-manager.yml

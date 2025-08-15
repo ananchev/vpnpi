@@ -1,0 +1,31 @@
+---
+# tasks/main.yml for network-config role
+
+- name: Configure static IP for eth0 using systemd-networkd
+  copy:
+    dest: /etc/systemd/network/10-eth0.network
+    content: |
+      [Match]
+      Name=eth0
+
+      [Network]
+      Address=192.168.50.1/24
+      DNS=8.8.8.8 1.1.1.1
+      #
+      # No gateway is configured for eth0.
+      # This ensures that wlan0 remains the default route for outbound traffic,
+      # so SSH access over home Wi-Fi is always possible and client traffic is not leaked.
+      #
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart systemd-networkd
+
+- name: Ensure systemd-networkd is enabled and started
+  systemd:
+    name: systemd-networkd
+    enabled: yes
+    state: started
+
+- import_tasks: dnsmasq-server.yml
+- import_tasks: firewall.yml

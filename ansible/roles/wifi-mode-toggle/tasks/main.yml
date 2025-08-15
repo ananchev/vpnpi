@@ -1,0 +1,302 @@
+---
+# tasks/main.yml for wifi-mode-toggle role
+
+- name: Install hostapd for Wi-Fi access point functionality
+  apt:
+    name: 
+      - hostapd
+      - bridge-utils
+    state: present
+  become: true
+
+- name: Deploy hostapd configuration for wlan0 access point
+  copy:
+    src: files/hostapd-wlan0.conf
+    dest: /etc/hostapd/hostapd-wlan0.conf
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Deploy separate dnsmasq configuration for wlan0 AP
+  copy:
+    src: files/dnsmasq-wlan0-ap.conf
+    dest: /etc/dnsmasq.d/wlan0-ap.conf
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Create systemd service for hostapd on wlan0
+  copy:
+    dest: /etc/systemd/system/hostapd-wlan0.service
+    content: |
+      [Unit]
+      Description=Hostapd IEEE 802.11 AP on wlan0
+      After=network.target
+
+      [Service]
+      Type=forking
+      PIDFile=/run/hostapd-wlan0.pid
+      ExecStart=/usr/sbin/hostapd -B -P /run/hostapd-wlan0.pid /etc/hostapd/hostapd-wlan0.conf
+      ExecReload=/bin/kill -HUP $MAINPID
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Create systemd service for dnsmasq on wlan0
+  copy:
+    dest: /etc/systemd/system/dnsmasq-wlan0.service
+    content: |
+      [Unit]
+      Description=dnsmasq DHCP server for wlan0 AP
+      After=network.target
+
+      [Service]
+      Type=forking
+      PIDFile=/run/dnsmasq-wlan0.pid
+      ExecStart=/usr/sbin/dnsmasq --conf-file= --conf-dir=/etc/dnsmasq.d/wlan0-ap.conf --pid-file=/run/dnsmasq-wlan0.pid
+      ExecReload=/bin/kill -HUP $MAINPID
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Deploy VPN routing update script
+  template:
+    src: templates/update-vpn-routing.sh.j2
+    dest: /usr/local/bin/update-vpn-routing.sh
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Deploy Wi-Fi toggle script for AP mode
+  template:
+    src: templates/wifi-toggle-ap.sh.j2
+    dest: /usr/local/bin/wifi-toggle-ap.sh
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Deploy Wi-Fi toggle script for client mode
+  template:
+    src: templates/wifi-toggle-client.sh.j2
+    dest: /usr/local/bin/wifi-toggle-client.sh
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Reload systemd daemon to recognize new services
+  systemd:
+    daemon_reload: yes
+  become: true
+
+- name: Create directory for wifi mode state tracking
+  file:
+    path: /var/lib/wifi-mode-toggle
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Initialize wifi mode state (default to client mode)
+  copy:
+    dest: /var/lib/wifi-mode-toggle/current-mode
+    content: |
+      {{ ansible_date_time.iso8601 }}: Initial client mode
+      client
+    owner: root
+    group: root
+    mode: '0644'
+    force: no
+  become: true
+
+- name: Create boot-time wifi mode restoration script
+  copy:
+    dest: /usr/local/bin/wifi-mode-restore.sh
+    content: |
+      #!/bin/bash
+      # wifi-mode-restore.sh: Restore wifi mode on boot
+      
+      MODE_FILE="/var/lib/wifi-mode-toggle/current-mode"
+      
+      if [ ! -f "$MODE_FILE" ]; then
+          echo "No mode state file found, defaulting to client mode"
+          exit 0
+      fi
+      
+      CURRENT_MODE=$(tail -n1 "$MODE_FILE")
+      
+      case "$CURRENT_MODE" in
+          "ap")
+              echo "Restoring AP mode on boot..."
+              # Wait for network interfaces to be ready
+              sleep 10
+              /usr/local/bin/wifi-toggle-ap.sh
+              ;;
+          "client")
+              echo "System is in client mode (default)"
+              ;;
+          *)
+              echo "Unknown mode: $CURRENT_MODE, defaulting to client mode"
+              ;;
+      esac
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Create systemd service for wifi mode restoration on boot
+  copy:
+    dest: /etc/systemd/system/wifi-mode-restore.service
+    content: |
+      [Unit]
+      Description=Restore Wi-Fi Mode on Boot
+      After=network-online.target NetworkManager.service
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/wifi-mode-restore.sh
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Enable wifi mode restoration service
+  systemd:
+    name: wifi-mode-restore
+    enabled: yes
+    daemon_reload: yes
+  become: true
+
+- name: Create wifi mode status script
+  copy:
+    dest: /usr/local/bin/wifi-mode-status.sh
+    content: |
+      #!/bin/bash
+      # wifi-mode-status.sh: Show current wifi mode status
+      
+      MODE_FILE="/var/lib/wifi-mode-toggle/current-mode"
+      
+      echo "=== Wi-Fi Mode Status ==="
+      echo ""
+      
+      if [ -f "$MODE_FILE" ]; then
+          echo "Mode History:"
+          cat "$MODE_FILE"
+          echo ""
+          
+          CURRENT_MODE=$(tail -n1 "$MODE_FILE")
+          case "$CURRENT_MODE" in
+              "ap")
+                  echo "Current Mode: ACCESS POINT"
+                  echo ""
+                  echo "AP Details:"
+                  echo "  SSID: VPNPI-Gateway"
+                  echo "  IP: 192.168.51.1"
+                  echo "  Status: $(systemctl is-active hostapd-wlan0)"
+                  echo "  DHCP: $(systemctl is-active dnsmasq-wlan0)"
+                  ;;
+              "client")
+                  echo "Current Mode: CLIENT"
+                  echo ""
+                  echo "Connection Status:"
+                  nmcli device status | grep wlan0 || echo "  wlan0 not found"
+                  ;;
+              *)
+                  echo "Current Mode: ❓ UNKNOWN ($CURRENT_MODE)"
+                  ;;
+          esac
+      else
+          echo "No mode state file found"
+      fi
+      
+      echo ""
+      echo "Available Commands:"
+      echo "  sudo wifi-toggle-ap.sh     - Switch to AP mode"
+      echo "  sudo wifi-toggle-client.sh - Switch to client mode"
+      echo "  wifi-mode-status.sh        - Show this status"
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Ensure hostapd and dnsmasq services are disabled by default (client mode is default)
+  systemd:
+    name: "{{ item }}"
+    enabled: false
+    state: stopped
+  loop:
+    - hostapd-wlan0
+    - dnsmasq-wlan0
+  become: true
+  ignore_errors: true
+
+- name: Create README for Wi-Fi mode toggle
+  copy:
+    dest: /usr/local/bin/README-wifi-toggle.md
+    content: |
+      # Wi-Fi Mode Toggle Scripts
+
+      The system can switch between two Wi-Fi modes for wlan0:
+
+      ## Client Mode (Default)
+      - wlan0 connects to your home Wi-Fi network
+      - Used for initial setup and maintenance
+      - Allows Ansible provisioning via home network
+
+      ## Access Point Mode
+      - wlan0 acts as a Wi-Fi access point
+      - Provides DHCP to wireless clients
+      - Routes client traffic through VPN tunnel (tun0)
+
+      ## Usage
+
+      ### Switch to Access Point Mode
+      ```bash
+      sudo /usr/local/bin/wifi-toggle-ap.sh
+      ```
+
+      ### Switch back to Client Mode
+      ```bash
+      sudo /usr/local/bin/wifi-toggle-client.sh
+      ```
+
+      ### Check Current Mode Status
+      ```bash
+      /usr/local/bin/wifi-mode-status.sh
+      ```
+
+      ## Network Details
+
+      - **AP SSID:** VPNPI-Gateway
+      - **AP Password:** VPNPiAccess2024
+      - **AP IP:** 192.168.51.1
+      - **Client DHCP Range:** 192.168.51.10-192.168.51.100
+      - **Client Traffic:** Routed through VPN tunnel
+
+      ## Notes
+
+      - Always ensure alternative access (reverse SSH, eth0) before switching to AP mode
+      - Use client mode for maintenance and updates
+      - AP clients get internet access through the VPN tunnel only
+    owner: root
+    group: root
+    mode: '0644'
+  become: true

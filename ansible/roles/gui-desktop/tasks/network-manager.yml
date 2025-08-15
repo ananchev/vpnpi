@@ -1,0 +1,43 @@
+---
+# tasks/network-manager.yml for gui-desktop role (GUI/desktop extras only)
+
+- name: Install Network Manager applet and PolicyKit integration
+  apt:
+    name:
+      - network-manager-gnome
+      - policykit-1-gnome
+    state: present
+
+- name: Ensure PolicyKit agent autostarts in all graphical sessions
+  copy:
+    dest: /etc/xdg/autostart/polkit-gnome-authentication-agent-1.desktop
+    content: |
+      [Desktop Entry]
+      Name=PolicyKit Authentication Agent
+      Exec=/usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1
+      Type=Application
+      X-GNOME-Autostart-enabled=true
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Ensure full PolicyKit access for user only
+  copy:
+    dest: /etc/polkit-1/rules.d/99-full-access.rules
+    content: |
+      polkit.addRule(function(action, subject) {
+          if (subject.user === "{{ vpnpi_admin_user }}") {
+              return polkit.Result.YES;
+          }
+      });
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Restart polkit service to apply new rules
+  systemd:
+    name: polkit
+    state: restarted
+  become: true

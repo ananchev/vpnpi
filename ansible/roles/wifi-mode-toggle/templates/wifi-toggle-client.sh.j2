@@ -1,0 +1,48 @@
+#!/bin/bash
+# wifi-toggle-client.sh: Switch wlan0 back to client mode
+
+set -e
+
+echo "=== Switching wlan0 to Client mode ==="
+
+# Stop and disable AP services (persist across reboots)
+echo "Stopping and disabling access point services..."
+systemctl stop hostapd-wlan0 2>/dev/null || true
+systemctl disable hostapd-wlan0 2>/dev/null || true
+systemctl stop dnsmasq-wlan0 2>/dev/null || true
+systemctl disable dnsmasq-wlan0 2>/dev/null || true
+
+# Remove wlan0 from VPN routing
+echo "Removing wlan0 from VPN routing..."
+/usr/local/bin/update-vpn-routing.sh remove-wlan0
+
+# Wait for interface to settle
+sleep 2
+
+# Re-enable NetworkManager management of wlan0
+echo "Re-enabling NetworkManager management of wlan0..."
+nmcli device set wlan0 managed yes
+
+# Wait for NetworkManager to take control
+sleep 3
+
+# Attempt to reconnect to known networks
+echo "Attempting to reconnect wlan0 to known networks..."
+nmcli device connect wlan0 2>/dev/null || true
+
+# Check connection status
+sleep 3
+if nmcli device status | grep wlan0 | grep -q connected; then
+    echo "SUCCESS: wlan0 restored to client mode and connected"
+    echo ""
+    nmcli device status | grep wlan0
+else
+    echo "wlan0 restored to client mode but not connected to any network"
+    echo "Available networks:"
+    nmcli device wifi list ifname wlan0 2>/dev/null || echo "No networks found"
+    echo ""
+    echo "To connect manually: nmcli device wifi connect \"<SSID>\" password \"<password>\" ifname wlan0"
+fi
+
+echo ""
+echo "To switch back to access point mode: sudo wifi-toggle-ap.sh"

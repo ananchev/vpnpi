@@ -1,0 +1,13 @@
+---
+# handlers/main.yml for network-config role
+- name: Restart systemd-networkd
+  systemd:
+    name: systemd-networkd
+    state: restarted
+  become: true
+
+- name: Restart dnsmasq
+  systemd:
+    name: dnsmasq
+    state: restarted
+  become: true

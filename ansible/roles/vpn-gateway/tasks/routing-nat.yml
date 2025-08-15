@@ -1,0 +1,41 @@
+---
+# tasks/routing-nat.yml for vpn-gateway role
+
+- name: Ensure iptables-persistent is installed
+  apt:
+    name: iptables-persistent
+    state: present
+  become: true
+
+- name: Enable IPv4 forwarding
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    state: present
+    sysctl_set: yes
+    reload: yes
+  become: true
+
+- name: Add NAT masquerade rule for eth0 to tun0
+  iptables:
+    table: nat
+    chain: POSTROUTING
+    out_interface: tun0
+    source: 192.168.50.0/24
+    jump: MASQUERADE
+    state: present
+  become: true
+
+- name: Block eth0 client traffic to any interface except tun0 (kill switch)
+  iptables:
+    table: filter
+    chain: FORWARD
+    in_interface: eth0
+    out_interface: '!tun0'
+    jump: REJECT
+    state: present
+  become: true
+
+- name: Save all iptables rules (v4) after all rules are applied
+  shell: iptables-save > /etc/iptables/rules.v4
+  become: true

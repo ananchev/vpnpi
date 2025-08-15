@@ -1,0 +1,42 @@
+---
+# tasks/dnsmasq-server.yml for network-config role
+
+- name: Stop and disable systemd-resolved
+  systemd:
+    name: systemd-resolved
+    state: stopped
+    enabled: false
+  become: true
+
+- name: Ensure /etc/resolv.conf exists and set nameserver after disabling systemd-resolved
+  copy:
+    dest: /etc/resolv.conf
+    content: "nameserver 8.8.8.8\n"
+    owner: root
+    group: root
+    mode: '0644'
+    force: yes
+
+- name: Install dnsmasq
+  apt:
+    name: dnsmasq
+    state: present
+
+- name: Configure dnsmasq for DHCP on eth0
+  copy:
+    dest: /etc/dnsmasq.d/eth0.conf
+    content: |
+      interface=eth0
+      dhcp-range=192.168.50.10,192.168.50.100,255.255.255.0,12h
+      dhcp-option=3,192.168.50.1
+      dhcp-option=6,8.8.8.8,1.1.1.1
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart dnsmasq
+
+- name: Ensure dnsmasq is enabled and started
+  systemd:
+    name: dnsmasq
+    enabled: yes
+    state: started

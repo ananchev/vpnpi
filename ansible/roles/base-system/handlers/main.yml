@@ -1,0 +1,6 @@
+---
+# handlers/main.yml for base-system role
+- name: Restart ssh
+  service:
+    name: ssh
+    state: restarted

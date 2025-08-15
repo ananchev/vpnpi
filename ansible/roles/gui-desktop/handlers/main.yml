@@ -1,0 +1,12 @@
+---
+# handlers/main.yml for gui-desktop role
+
+- name: Restart xrdp
+  systemd:
+    name: xrdp
+    state: restarted
+
+- name: Restart lightdm
+  systemd:
+    name: lightdm
+    state: restarted

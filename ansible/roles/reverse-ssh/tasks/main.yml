@@ -1,0 +1,77 @@
+---
+# tasks/main.yml for reverse-ssh role
+
+- import_tasks: pre-reqs.yml
+  tags: pre-reqs
+
+- name: Install autossh
+  apt:
+    name: autossh
+    state: present
+  become: true
+
+- name: Ensure /root/.ssh directory exists
+  file:
+    path: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  become: true
+
+- name: Deploy reverse SSH tunnel script
+  template:
+    src: vpnpi-reverse-ssh.sh.j2
+    dest: /usr/local/bin/vpnpi-reverse-ssh.sh
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Deploy SSH private key for reverse SSH tunnel
+  copy:
+    src: id_vpnpi_vhost
+    dest: /root/.ssh/id_vpnpi_vhost
+    owner: root
+    group: root
+    mode: '0600'
+  become: true
+
+- name: Deploy static ssh_known_hosts for reverse SSH
+  copy:
+    src: ssh_known_hosts
+    dest: /root/.ssh/known_hosts_vpnpi
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Create systemd service for persistent reverse SSH tunnel
+  copy:
+    dest: /etc/systemd/system/vpnpi-reverse-ssh.service
+    content: |
+      [Unit]
+      Description=Persistent Reverse SSH Tunnel (LTE/wlan1)
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      ExecStart=/usr/local/bin/vpnpi-reverse-ssh.sh
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Reload systemd and enable reverse SSH service
+  systemd:
+    daemon_reload: yes
+    name: vpnpi-reverse-ssh.service
+    enabled: yes
+    state: started
+  become: true

@@ -1,0 +1,41 @@
+---
+# tasks/firewall.yml for network-config role
+
+- name: Ensure UFW is installed
+  apt:
+    name: ufw
+    state: present
+
+- name: Ensure UFW default forward policy is ACCEPT
+  lineinfile:
+    path: /etc/default/ufw
+    regexp: '^DEFAULT_FORWARD_POLICY='
+    line: 'DEFAULT_FORWARD_POLICY="ACCEPT"'
+  become: true
+
+- name: Allow SSH from LAN subnet
+  ufw:
+    rule: allow
+    port: 22
+    proto: tcp
+    from_ip: 192.168.50.0/24
+
+- name: Allow XRDP from LAN subnet
+  ufw:
+    rule: allow
+    port: 3389
+    proto: tcp
+    from_ip: 192.168.50.0/24
+
+- name: Allow forwarding from eth0 to tun0
+  ufw:
+    rule: allow
+    route: yes
+    interface_in: eth0
+    interface_out: tun0
+
+- name: Enable UFW
+  ufw:
+    state: enabled
+    policy: allow
+

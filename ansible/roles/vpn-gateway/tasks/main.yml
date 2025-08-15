@@ -1,0 +1,71 @@
+---
+# tasks/main.yml for vpn-gateway role
+
+- name: Install OpenVPN package
+  apt:
+    name: openvpn
+    state: present
+  become: true
+
+- name: Deploy OpenVPN client config
+  copy:
+    src: files/vpnpi.ovpn
+    dest: /etc/openvpn/vpnpi.conf
+    owner: root
+    group: root
+    mode: '0600'
+  become: true
+
+- name: Deploy OpenVPN CA certificate
+  copy:
+    src: files/ca.crt
+    dest: /etc/openvpn/ca.crt
+    owner: root
+    group: root
+    mode: '0600'
+  become: true
+
+- name: Deploy OpenVPN client certificate
+  copy:
+    src: files/client.crt
+    dest: /etc/openvpn/client.crt
+    owner: root
+    group: root
+    mode: '0600'
+  become: true
+
+- name: Deploy OpenVPN client key
+  copy:
+    src: files/client.key
+    dest: /etc/openvpn/client.key
+    owner: root
+    group: root
+    mode: '0600'
+  become: true
+
+- name: Deploy OpenVPN TLS auth key
+  copy:
+    src: files/ta.key
+    dest: /etc/openvpn/ta.key
+    owner: root
+    group: root
+    mode: '0600'
+  become: true
+
+- name: Deploy policy routing script to /usr/local/sbin
+  copy:
+    src: files/vpnpi-policy-routing.sh
+    dest: /usr/local/sbin/vpnpi-policy-routing.sh
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Ensure OpenVPN service is enabled and started
+  systemd:
+    name: openvpn@vpnpi
+    enabled: yes
+    state: started
+  become: true
+
+- import_tasks: routing-nat.yml

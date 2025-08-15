@@ -1,0 +1,21 @@
+---
+# deploy.yml: Main playbook for vpnpi
+#
+# Role execution order is CRITICAL for a robust, headless VPN gateway setup.
+#
+# 1. network-config: Base networking, static IP, DHCP, firewall. MUST RUN FIRST.
+# 2. wifi-upstream: Wi-Fi uplink, NetworkManager CLI config. Depends on network-config.
+# 3. vpn-gateway: OpenVPN, policy routing, NAT, kill-switch. Depends on both network roles.
+# 4. gui-desktop: Desktop environment, GUI network tools. Safe to run last.
+# 5. reverse-ssh: Optional remote admin.
+# 6. wifi-mode-toggle: Deploy scripts to switch wlan0 between client and AP modes.
+
+- hosts: vpnpi
+  become: yes
+  roles:
+    - { role: network-config, tags: '01-network-config' }
+    - { role: wifi-upstream, tags: '02-wifi-upstream' }
+    - { role: vpn-gateway, tags: '03-vpn-gateway' }
+    - { role: gui-desktop, tags: '04-gui-desktop' }
+    - { role: reverse-ssh, tags: '05-reverse-ssh' }
+    - { role: wifi-mode-toggle, tags: '06-wifi-mode-toggle' }

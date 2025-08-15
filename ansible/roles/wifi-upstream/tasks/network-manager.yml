@@ -1,0 +1,42 @@
+---
+# tasks/network-manager.yml for wifi-upstream role (headless/CLI essentials)
+
+- name: Install NetworkManager (CLI/headless)
+  apt:
+    name: network-manager
+    state: present
+
+- name: Add user to netdev group for network management
+  user:
+    name: "{{ ansible_user_id }}"
+    groups: netdev
+    append: yes
+  become: true
+
+- name: Ensure NetworkManager service is running
+  systemd:
+    name: NetworkManager
+    enabled: yes
+    state: started
+  become: true
+
+- name: Ensure NetworkManager manages interfaces
+  lineinfile:
+    path: /etc/NetworkManager/NetworkManager.conf
+    regexp: '^managed='
+    line: 'managed=true'
+    insertafter: '^\[ifupdown\]'
+  become: true
+
+- name: Deploy netplan config for wlan0 and wlan1 using template
+  template:
+    src: templates/50-cloud-init.yaml.j2
+    dest: /etc/netplan/50-cloud-init.yaml
+    owner: root
+    group: root
+    mode: '0600'
+  become: true
+
+- name: Apply netplan configuration
+  command: netplan apply
+  become: true

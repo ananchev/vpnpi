@@ -1,0 +1,14 @@
+---
+# handlers/main.yml for wifi-mode-toggle role
+
+- name: Restart hostapd-wlan0
+  systemd:
+    name: hostapd-wlan0
+    state: restarted
+  become: true
+
+- name: Restart dnsmasq-wlan0
+  systemd:
+    name: dnsmasq-wlan0
+    state: restarted
+  become: true

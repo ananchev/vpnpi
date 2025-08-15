@@ -1,0 +1,29 @@
+#cloud-init netplan config for RPi with NetworkManager for wlan0 and wlan1
+# wlan1 uses DummyNetwork as a placeholder SSID and dummyNetworkPassword as a placeholder password.
+# These are only to satisfy netplan syntax; use the NetworkManager UI to define real connections for wlan1 after deployment.
+network:
+  version: 2
+  ethernets:
+    eth0:
+      optional: true
+      dhcp4: no
+      # Do not assign addresses here; eth0 is managed by systemd-networkd
+  wifis:
+    renderer: NetworkManager
+    wlan0:
+      optional: true
+      dhcp4: true
+      access-points:
+        "CasaDiMi":
+          auth:
+            key-management: "psk"
+            password: "{{ wifi_wlan0_password | default('changeme') }}"
+    wlan1:
+      optional: true
+      dhcp4: true
+      renderer: NetworkManager
+      access-points:
+        "DummyNetwork":
+          auth:
+            key-management: "psk"
+            password: "{{ dummyNetworkPassword | default('changeme') }}"

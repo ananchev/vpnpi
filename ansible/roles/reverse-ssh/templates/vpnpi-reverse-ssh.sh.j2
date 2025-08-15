@@ -1,0 +1,73 @@
+#!/bin/bash
+# vpnpi-reverse-ssh.sh: Persistent reverse SSH tunnel using LTE (wwan0) or fallback to wlan1
+
+REMOTE_HOST="{{ reverse_ssh_host }}"
+REMOTE_USER="{{ reverse_ssh_user }}"
+REMOTE_SSH_PORT="{{ reverse_ssh_port }}"
+PRIVATE_KEY="{{ reverse_ssh_private_key }}"
+REVERSE_SSH_PORT="{{ reverse_ssh_ssh_port }}"
+REVERSE_RDP_PORT="{{ reverse_ssh_rdp_port }}"
+LOCAL_SSH_PORT="{{ reverse_ssh_local_ssh_port }}"
+LOCAL_RDP_PORT="{{ reverse_ssh_local_rdp_port }}"
+KNOWN_HOSTS_FILE="/root/.ssh/known_hosts_vpnpi"
+
+# Preferred interfaces
+PREF_IFACES=("wwan0" "wlan1")
+
+# Wait for interfaces to be ready (max 30s)
+for i in {1..6}; do
+    for IFACE in "${PREF_IFACES[@]}"; do
+        echo "Evaluating interface: $IFACE"
+        if /usr/sbin/ip link show "$IFACE" >/dev/null 2>&1; then
+            IP=$(/usr/sbin/ip -4 -o addr show "$IFACE" | /usr/bin/awk '{print $4}' | /usr/bin/cut -d/ -f1)
+            if [ -n "$IP" ]; then
+                # Test internet connectivity from this interface
+                if /bin/ping -I "$IFACE" -c 1 8.8.8.8 >/dev/null 2>&1; then
+                    echo "Reverse SSH tunnel will use uplink interface: $IFACE ($IP)"
+                    SRC_IP="$IP"
+                    SRC_IFACE="$IFACE"
+                    break 2
+                else
+                    echo "No internet connection on interface $IFACE ($IP)"
+                fi
+            else
+                echo "Interface $IFACE has no IPv4 address."
+            fi
+        else
+            echo "Interface $IFACE not present."
+        fi
+    done
+    sleep 5
+    echo "Waiting for uplink interface... ($i)"
+done
+
+if [ -z "$SRC_IP" ]; then
+    echo "No suitable interface found for reverse SSH tunnel. Exiting."
+    exit 1
+fi
+
+# Start autossh with forced source IP, key auth, and static known_hosts (never use VPN)
+autossh -M 0 -N -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" \
+    -o "ExitOnForwardFailure=yes" \
+    -o "StrictHostKeyChecking=yes" \
+    -o "UserKnownHostsFile=$KNOWN_HOSTS_FILE" \
+    -b "$SRC_IP" \
+    -i "$PRIVATE_KEY" \
+    -R "0.0.0.0:$REVERSE_SSH_PORT:localhost:$LOCAL_SSH_PORT" \
+    -R "0.0.0.0:$REVERSE_RDP_PORT:localhost:$LOCAL_RDP_PORT" \
+    -p "$REMOTE_SSH_PORT" "$REMOTE_USER@$REMOTE_HOST" &
+AUTOSSH_PID=$!
+
+# Monitor if selected interface is still present/up
+while sleep 30; do
+    if ! /usr/sbin/ip link show "$SRC_IFACE" | grep -q "state UP"; then
+        echo "Active interface $SRC_IFACE is down or removed. Restarting tunnel selection..."
+        kill $AUTOSSH_PID
+        exec "$0"
+        exit 0
+    fi
+    if ! kill -0 $AUTOSSH_PID 2>/dev/null; then
+        break
+    fi
+
+done

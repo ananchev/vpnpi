@@ -1,0 +1,61 @@
+#!/bin/bash
+# wifi-toggle-ap.sh: Switch wlan0 to Access Point mode
+
+set -e
+
+echo "=== Switching wlan0 to Access Point mode ==="
+
+# Check if VPN tunnel is active
+if ! ip link show tun0 >/dev/null 2>&1; then
+    echo "WARNING: VPN tunnel (tun0) is not active. AP clients will have no internet access."
+    read -p "Continue anyway? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+fi
+
+# Stop existing wlan0 client connections
+echo "Disconnecting wlan0 from client networks..."
+nmcli device disconnect wlan0 2>/dev/null || true
+
+# Stop conflicting services
+echo "Stopping NetworkManager management of wlan0..."
+nmcli device set wlan0 managed no 2>/dev/null || true
+
+# Wait a moment for interface to settle
+sleep 2
+
+# Configure wlan0 for AP mode and add VPN routing
+echo "Configuring wlan0 for access point mode..."
+/usr/local/bin/update-vpn-routing.sh add-wlan0
+
+# Enable and start hostapd service (persist across reboots)
+echo "Starting and enabling hostapd service..."
+systemctl enable hostapd-wlan0
+systemctl start hostapd-wlan0
+sleep 2
+
+# Enable and start dnsmasq service for DHCP on wlan0 (persist across reboots)
+echo "Starting and enabling DHCP service for wlan0..."
+systemctl enable dnsmasq-wlan0
+systemctl start dnsmasq-wlan0
+
+# Verify services are running
+if systemctl is-active --quiet hostapd-wlan0 && systemctl is-active --quiet dnsmasq-wlan0; then
+    echo "SUCCESS: Wi-Fi Access Point is now active!"
+    echo ""
+    echo "Access Point Details:"
+    echo "  SSID: VPNPI-Gateway"
+    echo "  Password: VPNPiAccess2024"
+    echo "  AP IP: 192.168.51.1"
+    echo "  Client DHCP Range: 192.168.51.10-192.168.51.100"
+    echo "  Client Traffic: Routed through VPN tunnel (tun0)"
+    echo ""
+    echo "To switch back to client mode: sudo wifi-toggle-client.sh"
+else
+    echo "ERROR: Failed to start access point services"
+    echo "Attempting to restore client mode..."
+    /usr/local/bin/wifi-toggle-client.sh
+    exit 1
+fi

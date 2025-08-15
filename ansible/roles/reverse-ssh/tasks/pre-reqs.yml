@@ -1,0 +1,27 @@
+---
+# tasks/pre-reqs.yml for reverse-ssh role (udev and reboot)
+
+- name: Create udev rule to rename Huawei LTE dongle to wwan0
+  copy:
+    dest: /etc/udev/rules.d/99-wwan0-lte.rules
+    content: 'SUBSYSTEM=="net", ACTION=="add", ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="14db", NAME="wwan0"'
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Reload udev rules
+  command: udevadm control --reload
+  become: true
+
+- name: Trigger udev to apply new rules
+  command: udevadm trigger
+  become: true
+
+- name: Reboot system after applying udev rules to ensure network recovery
+  reboot:
+    msg: "Rebooting to apply udev network interface changes."
+    pre_reboot_delay: 5
+    post_reboot_delay: 10
+    reboot_timeout: 300
+  become: true

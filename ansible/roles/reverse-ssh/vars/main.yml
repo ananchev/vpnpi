@@ -1,0 +1,9 @@
+# reverse-ssh role variables
+reverse_ssh_host: connect.tonio.cc
+reverse_ssh_port: 80
+reverse_ssh_user: ananchev
+reverse_ssh_private_key: /root/.ssh/id_vpnpi_vhost
+reverse_ssh_ssh_port: 22221
+reverse_ssh_rdp_port: 33891
+reverse_ssh_local_ssh_port: 22
+reverse_ssh_local_rdp_port: 3389

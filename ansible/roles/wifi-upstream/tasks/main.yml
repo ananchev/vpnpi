@@ -1,0 +1,32 @@
+---
+# tasks/main.yml for wifi-upstream role
+
+- name: Create udev rule to rename Archer T3U Plus to wlan1
+  copy:
+    dest: /etc/udev/rules.d/70-persistent-net-wlan1.rules
+    content: 'SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="98:03:8e:4f:a1:23", NAME="wlan1"'
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Reload udev rules
+  command: udevadm control --reload
+  become: true
+
+- name: Trigger udev to apply new rules
+  command: udevadm trigger
+  become: true
+
+- name: Reboot system after applying udev rules to ensure network recovery
+  reboot:
+    msg: "Rebooting to apply udev network interface changes."
+    pre_reboot_delay: 5
+    post_reboot_delay: 10
+    reboot_timeout: 300
+  become: true
+
+
+# Include essential NetworkManager and netplan configuration for headless/CLI
+- name: Include network-manager tasks for wifi-upstream
+  import_tasks: network-manager.yml
