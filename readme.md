@@ -25,7 +25,7 @@ The device also supports **remote administration** (via SSH and XRDP) through a 
 | `wlan1`          | Primary internet uplink           | TP-Link Archer T3U Plus (USB Wi-Fi) | Used for OpenVPN connection         |
 | `eth0`           | Downstream client connection      | RJ45 Ethernet                     | Routed through VPN tunnel; also used for local admin access |
 | `wlan0`          | Dual-mode Wi-Fi interface         | Built-in Wi-Fi                    | **Client mode**: Connect to home Wi-Fi (default)<br/>**AP mode**: Wi-Fi access point for VPN clients |
-| `wwan0` | Remote access uplink (when present) | USB LTE Modem                     | Triggers reverse SSH tunnel, no VPN usage |
+| `wwan0` | Remote access & VPN uplink         | USB LTE Modem                     | Provides internet for VPN tunnel + management |
 
 ---
 
@@ -54,7 +54,7 @@ The device also supports **remote administration** (via SSH and XRDP) through a 
 - On LTE or `wlan1` connection, automatically open reverse SSH tunnel
 - Tunnel exposes both `ssh` and `xrdp` access ports
 - The SSH tunnel binds forwarded ports externally to allow connections from any host
-- LTE **not used** for VPN — only for management
+- LTE **can be used** for VPN uplink when wlan1 unavailable — management traffic still bypasses VPN
 
 ### XFCE GUI & XRDP
 - Install **XFCE** desktop environment
